@@ -1,4 +1,4 @@
-# Remote Control App
+# Remote Control App by Maxime
 
 A powerful web-based remote control application that allows you to control your computer from any device with a web browser.
 
