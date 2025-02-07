@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Screen Share - Remote Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            height: 100%;
+            overscroll-behavior: contain;
+        }
+
+        body {
+            font-family: 'Roboto', Arial, sans-serif;
+            background-color: #121212;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background-color: rgba(0,0,0,0.5);
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+        }
+
+        .back-button, .fullscreen-button {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.3s;
+        }
+
+        .back-button:active, .fullscreen-button:active {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .material-icons {
+            font-size: 24px;
+        }
+
+        #screenContainer {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #000;
+        }
+
+        #screenContainer.custom-fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vh;
+            height: 100vw;
+            background: black;
+            z-index: 9999;
+            transform: rotate(90deg) translate(50%, -50%);
+            transform-origin: top left;
+            overflow: hidden;
+        }
+
+        #screenContainer.custom-fullscreen #screenImage {
+            max-width: 100%;
+            max-height: 100%;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        #screenContainer.custom-fullscreen .top-bar,
+        #screenContainer.custom-fullscreen #controlToggle,
+        #screenContainer.custom-fullscreen #status {
+            display: none;
+        }
+
+        #screenImageWrapper {
+            position: relative;
+            max-width: 100%;
+            max-height: 100%;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #screenImage {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            transition: transform 0.2s ease;
+        }
+
+        #controlsDrawer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.9);
+            border-top-left-radius: 20px;
+            border-top-right-radius: 20px;
+            transition: transform 0.3s ease;
+            transform: translateY(100%);
+            z-index: 2000;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        #controlsDrawer.open {
+            transform: translateY(0);
+        }
+
+        .drawer-handle {
+            width: 50px;
+            height: 6px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 3px;
+            align-self: center;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+
+        .control-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .control-button {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            transition: background 0.3s;
+        }
+
+        .control-button:active {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+        }
+
+        .slider {
+            width: 100%;
+            -webkit-appearance: none;
+            background: rgba(255,255,255,0.2);
+            outline: none;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+            border-radius: 5px;
+            height: 8px;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: white;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+        #status {
+            text-align: center;
+            padding: 10px;
+            background: rgba(0,0,0,0.7);
+            font-size: 14px;
+            position: absolute;
+            bottom: 60px;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+        }
+
+        #controlToggle {
+            position: fixed;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 30px;
+            cursor: pointer;
+            z-index: 1500;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            max-width: calc(100% - 40px); /* Ensure it doesn't overflow */
+            width: auto;
+        }
+
+        #controlToggle:active {
+            background: rgba(255,255,255,0.2);
+        }
+
+        @media (max-height: 600px) {
+            #controlToggle {
+                bottom: 5px;
+                padding: 10px 15px;
+                font-size: 14px;
+            }
+        }
+
+        @media (max-width: 350px) {
+            #controlToggle {
+                padding: 10px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="top-bar">
+        <button class="back-button" onclick="window.location.href='/'">
+            <span class="material-icons">arrow_back</span>
+        </button>
+        <button id="fullscreenButton" class="fullscreen-button">
+            <span class="material-icons">fullscreen</span>
+        </button>
+    </div>
+
+    <div id="screenContainer">
+        <div id="screenImageWrapper">
+            <img id="screenImage" alt="Screen Share">
+        </div>
+    </div>
+
+    <div id="status">Not connected</div>
+
+    <button id="controlToggle">
+        <span class="material-icons">tune</span>Controls
+    </button>
+
+    <div id="controlsDrawer">
+        <div class="drawer-handle"></div>
+        
+        <div class="control-section">
+            <div class="control-row">
+                <button id="startButton" class="control-button">
+                    <span class="material-icons">play_arrow</span>Start
+                </button>
+                <button id="stopButton" class="control-button" disabled>
+                    <span class="material-icons">stop</span>Stop
+                </button>
+            </div>
+        </div>
+
+        <div class="control-section">
+            <div class="control-row">
+                <div class="slider-container">
+                    <label for="zoomSlider">Zoom</label>
+                    <input type="range" id="zoomSlider" min="1" max="3" step="0.1" value="1" class="slider">
+                </div>
+                <button id="centerButton" class="control-button">
+                    <span class="material-icons">center_focus_strong</span>Center
+                </button>
+            </div>
+        </div>
+
+        <div class="control-section">
+            <div class="control-row">
+                <div class="slider-container">
+                    <label for="qualitySlider">Quality</label>
+                    <input type="range" id="qualitySlider" min="10" max="100" value="90" class="slider">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const screenContainer = document.getElementById('screenContainer');
+        const screenImageWrapper = document.getElementById('screenImageWrapper');
+        const screenImage = document.getElementById('screenImage');
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const zoomSlider = document.getElementById('zoomSlider');
+        const qualitySlider = document.getElementById('qualitySlider');
+        const centerButton = document.getElementById('centerButton');
+        const fullscreenButton = document.getElementById('fullscreenButton');
+        const status = document.getElementById('status');
+        const controlToggle = document.getElementById('controlToggle');
+        const controlsDrawer = document.getElementById('controlsDrawer');
+        const drawerHandle = document.querySelector('.drawer-handle');
+
+        let isSharing = false;
+        let isDragging = false;
+        let startX, startY;
+        let translateX = 0, translateY = 0;
+        let currentZoom = 1;
+        let tapCount = 0;
+        let lastTapTime = 0;
+
+        // Function to stop screen sharing
+        function stopScreenShare() {
+            if (isSharing) {
+                isSharing = false;
+                startButton.disabled = false;
+                stopButton.disabled = true;
+                status.textContent = 'Screen sharing stopped';
+                screenImage.src = '';
+
+                // Send request to server to stop screen sharing
+                fetch('/stop_screen_share', { method: 'GET' })
+                    .catch(err => console.error('Error stopping screen share:', err));
+            }
+        }
+
+        // Stop screen sharing when leaving the page
+        window.addEventListener('beforeunload', stopScreenShare);
+
+        // Stop screen sharing when navigating back
+        window.addEventListener('popstate', stopScreenShare);
+
+        // Back button event
+        const backButton = document.querySelector('.back-button');
+        backButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            stopScreenShare();
+            window.location.href = '/';
+        });
+
+        // Control Drawer Toggle
+        controlToggle.addEventListener('click', toggleControlDrawer);
+        drawerHandle.addEventListener('click', toggleControlDrawer);
+
+        function toggleControlDrawer() {
+            controlsDrawer.classList.toggle('open');
+        }
+
+        // Close drawer when clicking outside
+        screenContainer.addEventListener('click', (e) => {
+            if (controlsDrawer.classList.contains('open')) {
+                const drawerRect = controlsDrawer.getBoundingClientRect();
+                const clickY = e.clientY;
+                
+                // Close if click is above the drawer
+                if (clickY < drawerRect.top) {
+                    controlsDrawer.classList.remove('open');
+                }
+            }
+        });
+
+        // Drawer Handle Drag
+        drawerHandle.addEventListener('pointerdown', (e) => {
+            const startY = e.clientY;
+            
+            function onPointerMove(moveEvent) {
+                const deltaY = moveEvent.clientY - startY;
+                if (deltaY < -50) {
+                    controlsDrawer.classList.remove('open');
+                    document.removeEventListener('pointermove', onPointerMove);
+                    document.removeEventListener('pointerup', onPointerUp);
+                }
+            }
+
+            function onPointerUp() {
+                document.removeEventListener('pointermove', onPointerMove);
+                document.removeEventListener('pointerup', onPointerUp);
+            }
+
+            document.addEventListener('pointermove', onPointerMove);
+            document.addEventListener('pointerup', onPointerUp);
+        });
+
+        // Triple tap fullscreen functionality
+        screenImage.addEventListener('touchstart', (e) => {
+            const currentTime = new Date().getTime();
+            
+            // Reset tap count if taps are too far apart
+            if (currentTime - lastTapTime > 300) {
+                tapCount = 0;
+            }
+            
+            tapCount++;
+            lastTapTime = currentTime;
+
+            // Toggle custom fullscreen on triple tap
+            if (tapCount === 3) {
+                toggleCustomFullscreen();
+                tapCount = 0;
+            }
+        });
+
+        function toggleCustomFullscreen() {
+            // Toggle custom fullscreen class
+            screenContainer.classList.toggle('custom-fullscreen');
+
+            // Adjust screen orientation if possible
+            if (screen.orientation && screen.orientation.lock) {
+                if (screenContainer.classList.contains('custom-fullscreen')) {
+                    // Try to lock to landscape
+                    screen.orientation.lock('landscape-primary')
+                        .catch(err => console.log('Orientation lock failed', err));
+                } else {
+                    // Unlock orientation
+                    screen.orientation.unlock();
+                }
+            }
+
+            // Adjust image scaling when entering/exiting custom fullscreen
+            if (screenContainer.classList.contains('custom-fullscreen')) {
+                // Ensure image fills the screen in landscape
+                screenImage.style.transform = 'scale(1) translate(0, 0)';
+                zoomSlider.value = 1;
+                currentZoom = 1;
+            } else {
+                // Restore previous zoom and pan
+                updateTransform();
+            }
+        }
+
+        // Fullscreen functionality with cross-browser support
+        fullscreenButton.addEventListener('click', toggleFullscreen);
+
+        function toggleFullscreen() {
+            const fullscreenIcon = fullscreenButton.querySelector('.material-icons');
+            
+            if (!document.fullscreenElement) {
+                // Try different methods for requesting fullscreen
+                const requestFullscreen = 
+                    screenContainer.requestFullscreen || 
+                    screenContainer.mozRequestFullScreen || 
+                    screenContainer.webkitRequestFullscreen || 
+                    screenContainer.msRequestFullscreen;
+                
+                if (requestFullscreen) {
+                    requestFullscreen.call(screenContainer);
+                    fullscreenIcon.textContent = 'fullscreen_exit';
+                }
+            } else {
+                // Try different methods for exiting fullscreen
+                const exitFullscreen = 
+                    document.exitFullscreen || 
+                    document.mozCancelFullScreen || 
+                    document.webkitExitFullscreen || 
+                    document.msExitFullscreen;
+                
+                if (exitFullscreen) {
+                    exitFullscreen.call(document);
+                    fullscreenIcon.textContent = 'fullscreen';
+                }
+            }
+        }
+
+        // Fullscreen change event listeners
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+        document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+        document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+        function handleFullscreenChange() {
+            const fullscreenIcon = fullscreenButton.querySelector('.material-icons');
+            fullscreenIcon.textContent = document.fullscreenElement ? 'fullscreen_exit' : 'fullscreen';
+        }
+
+        socket.on('connect', () => {
+            status.textContent = 'Connected to server';
+        });
+
+        socket.on('screen_frame', (imageData) => {
+            if (isSharing) {
+                screenImage.src = `data:image/jpeg;base64,${imageData}`;
+            }
+        });
+
+        function updateTransform() {
+            if (!screenContainer.classList.contains('custom-fullscreen')) {
+                screenImage.style.transform = `scale(${currentZoom}) translate(${translateX}px, ${translateY}px)`;
+            }
+        }
+
+        // Zoom control
+        zoomSlider.addEventListener('input', () => {
+            currentZoom = parseFloat(zoomSlider.value);
+            updateTransform();
+        });
+
+        // Center button
+        centerButton.addEventListener('click', () => {
+            translateX = 0;
+            translateY = 0;
+            zoomSlider.value = 1;
+            currentZoom = 1;
+            updateTransform();
+        });
+
+        // Pan/Drag functionality
+        screenImage.addEventListener('pointerdown', (e) => {
+            isDragging = true;
+            startX = e.clientX - translateX;
+            startY = e.clientY - translateY;
+            screenImage.setPointerCapture(e.pointerId);
+        });
+
+        screenImage.addEventListener('pointermove', (e) => {
+            if (!isDragging) return;
+
+            translateX = e.clientX - startX;
+            translateY = e.clientY - startY;
+            updateTransform();
+        });
+
+        screenImage.addEventListener('pointerup', (e) => {
+            isDragging = false;
+            screenImage.releasePointerCapture(e.pointerId);
+        });
+
+        screenImage.addEventListener('pointercancel', (e) => {
+            isDragging = false;
+            screenImage.releasePointerCapture(e.pointerId);
+        });
+
+        startButton.addEventListener('click', () => {
+            isSharing = true;
+            startButton.disabled = true;
+            stopButton.disabled = false;
+            status.textContent = 'Screen sharing started';
+            
+            // Request screen share
+            socket.emit('start_screen_share');
+        });
+
+        stopButton.addEventListener('click', () => {
+            isSharing = false;
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            status.textContent = 'Screen sharing stopped';
+            screenImage.src = '';
+        });
+
+        qualitySlider.addEventListener('input', () => {
+            const quality = parseInt(qualitySlider.value);
+            
+            // Emit quality adjustment
+            socket.emit('adjust_quality', {
+                quality: quality,
+                width: 1920,
+                height: 1080
+            });
+        });
+
+        socket.on('disconnect', () => {
+            isSharing = false;
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            status.textContent = 'Disconnected from server';
+        });
+
+        // Enhanced mouse tracking
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+        let isMouseDown = false;
+        let screenWidth = window.screen.width;
+        let screenHeight = window.screen.height;
+
+        // Utility function to calculate mouse coordinates
+        function calculateMouseCoordinates(e) {
+            const rect = screenImage.getBoundingClientRect();
+            const scaleX = screenWidth / rect.width;
+            const scaleY = screenHeight / rect.height;
+            
+            const x = Math.round((e.clientX - rect.left) * scaleX);
+            const y = Math.round((e.clientY - rect.top) * scaleY);
+            
+            return { x, y };
+        }
+
+        screenImage.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            isMouseDown = true;
+            
+            const { x, y } = calculateMouseCoordinates(e);
+            
+            lastMouseX = x;
+            lastMouseY = y;
+
+            // Send mouse down event with absolute positioning
+            socket.emit('mouse_move', { x, y, type: 'absolute' });
+            socket.emit('mouse_click', { button: e.button === 2 ? 'right' : 'left', type: 'down' });
+        });
+
+        screenImage.addEventListener('pointermove', (e) => {
+            if (!isMouseDown) return;
+            
+            e.preventDefault();
+            
+            const { x, y } = calculateMouseCoordinates(e);
+            
+            // Calculate relative movement
+            const dx = x - lastMouseX;
+            const dy = y - lastMouseY;
+            
+            // Send relative mouse movement
+            socket.emit('mouse_move', { x: dx, y: dy, type: 'relative' });
+            
+            lastMouseX = x;
+            lastMouseY = y;
+        });
+
+        screenImage.addEventListener('pointerup', (e) => {
+            if (!isMouseDown) return;
+            
+            e.preventDefault();
+            isMouseDown = false;
+
+            // Send mouse up event
+            socket.emit('mouse_click', { button: e.button === 2 ? 'right' : 'left', type: 'up' });
+        });
+
+        // Right-click context menu prevention
+        screenImage.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            
+            const { x, y } = calculateMouseCoordinates(e);
+            
+            socket.emit('mouse_move', { x, y, type: 'absolute' });
+            socket.emit('mouse_click', { button: 'right', type: 'single' });
+        });
+
+        // Double-click handling
+        let lastClickTime = 0;
+        screenImage.addEventListener('click', (e) => {
+            const currentTime = new Date().getTime();
+            
+            if (currentTime - lastClickTime < 300) {
+                const { x, y } = calculateMouseCoordinates(e);
+                
+                socket.emit('mouse_move', { x, y, type: 'absolute' });
+                socket.emit('mouse_click', { button: 'left', type: 'double' });
+            }
+            
+            lastClickTime = currentTime;
+        });
+
+        // Listen for mouse position updates
+        socket.on('mouse_position', (pos) => {
+            console.log('Current mouse position:', pos.x, pos.y);
+        });
+
+        // Error handling for mouse movements
+        socket.on('mouse_move_error', (error) => {
+            console.error('Mouse movement error:', error.message);
+        });
+
+        // Update screen dimensions on resize
+        window.addEventListener('resize', () => {
+            screenWidth = window.screen.width;
+            screenHeight = window.screen.height;
+        });
+
+        // Scroll handling
+        screenImage.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            
+            // Send scroll events
+            socket.emit('mouse_scroll', { 
+                dx: Math.round(e.deltaX), 
+                dy: Math.round(e.deltaY) 
+            });
+        });
+
+        // Socket event to update screen resolution dynamically
+        socket.on('screen_resolution', (resolution) => {
+            screenWidth = resolution[0];
+            screenHeight = resolution[1];
+        });
+
+        // Prevent default touch behaviors
+        screenImage.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 1) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        screenImage.addEventListener('touchmove', (e) => {
+            if (e.touches.length > 1) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+    </script>
+</body>
+</html>

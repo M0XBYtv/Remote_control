@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Camera View - Remote Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .back-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .back-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding-top: 60px;
+        }
+
+        #videoContainer {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin: 20px auto;
+            border-radius: 15px;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        #remoteVideo {
+            width: 100%;
+            border-radius: 15px;
+            display: none;
+        }
+
+        .camera-placeholder {
+            width: 100%;
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            font-size: 1.2em;
+            color: rgba(255, 255, 255, 0.7);
+            text-align: center;
+            padding: 20px;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <button class="back-button" onclick="window.location.href='/'">← Back</button>
+
+    <div class="container">
+        <div id="videoContainer">
+            <video id="remoteVideo" autoplay playsinline></video>
+            <div class="camera-placeholder">
+                Waiting for PC camera stream...
+            </div>
+        </div>
+
+        <div class="status" id="status">Not connected</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const remoteVideo = document.getElementById('remoteVideo');
+        const videoContainer = document.getElementById('videoContainer');
+        const status = document.getElementById('status');
+        
+        let peerConnection;
+
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' }
+            ]
+        };
+
+        socket.on('connect', () => {
+            status.textContent = 'Connected, waiting for camera...';
+        });
+
+        socket.on('disconnect', () => {
+            status.textContent = 'Disconnected';
+            remoteVideo.style.display = 'none';
+            videoContainer.querySelector('.camera-placeholder').style.display = 'flex';
+        });
+
+        socket.on('offer', async (offer) => {
+            try {
+                peerConnection = new RTCPeerConnection(configuration);
+                
+                peerConnection.ontrack = (event) => {
+                    remoteVideo.srcObject = event.streams[0];
+                    remoteVideo.style.display = 'block';
+                    videoContainer.querySelector('.camera-placeholder').style.display = 'none';
+                    status.textContent = 'Receiving camera stream';
+                };
+
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        socket.emit('ice_candidate', event.candidate);
+                    }
+                };
+
+                await peerConnection.setRemoteDescription(offer);
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                socket.emit('answer', answer);
+            } catch (error) {
+                console.error('Error handling offer:', error);
+                status.textContent = 'Error connecting to camera';
+            }
+        });
+
+        socket.on('ice_candidate', async (candidate) => {
+            try {
+                if (peerConnection) {
+                    await peerConnection.addIceCandidate(candidate);
+                }
+            } catch (error) {
+                console.error('Error adding ICE candidate:', error);
+            }
+        });
+
+        // Handle page unload
+        window.addEventListener('beforeunload', () => {
+            if (peerConnection) {
+                peerConnection.close();
+            }
+        });
+    </script>
+</body>
+</html>

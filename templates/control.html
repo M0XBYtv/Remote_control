@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Remote Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: white;
+            touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        #touchpad {
+            width: 100%;
+            height: 300px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            touch-action: none;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            cursor: grab;
+            position: relative;
+            overflow: hidden;
+            background-image: radial-gradient(circle, rgba(255, 255, 255, 0.2) 1px, transparent 1px);
+            background-size: 15px 15px;
+        }
+
+        #touchpad:active {
+            cursor: grabbing;
+            background-color: rgba(255, 255, 255, 0.15);
+        }
+
+        #touchpad::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%);
+            pointer-events: none;
+        }
+
+        #touchpad::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        #touchpad:active::after {
+            opacity: 1;
+        }
+        .button-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 15px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            background-color: rgba(0, 123, 255, 0.8);
+            color: white;
+            cursor: pointer;
+            backdrop-filter: blur(5px);
+        }
+        button:active {
+            background-color: rgba(0, 86, 179, 0.8);
+        }
+        #keyboard {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 5px;
+            margin-bottom: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            backdrop-filter: blur(5px);
+        }
+        
+        .title {
+            text-align: center;
+            font-size: 2em;
+            margin-bottom: 40px;
+            opacity: 0;
+            animation: fadeIn 1s ease forwards;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="title">Mouse & Keyboard Control</div>
+    <div id="touchpad"></div>
+    
+    <div class="button-container">
+        <button id="leftClick">Left Click</button>
+        <button id="rightClick">Right Click</button>
+    </div>
+
+    <input type="text" id="keyboard" placeholder="Type here to send keystrokes">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const touchpad = document.getElementById('touchpad');
+        let lastX = 0;
+        let lastY = 0;
+        let sensitivity = 1.5;
+        let touchStartTime = 0;
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        // Prevent double tap zoom
+        document.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+        });
+
+        // Prevent all touch zooming
+        document.addEventListener('touchmove', (e) => {
+            if (e.touches.length > 1) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        touchpad.addEventListener('pointerdown', handlePointerDown);
+        touchpad.addEventListener('pointermove', handlePointerMove);
+        touchpad.addEventListener('pointerup', handlePointerUp);
+        
+        function handlePointerDown(e) {
+            lastX = e.clientX;
+            lastY = e.clientY;
+            touchStartX = e.clientX;
+            touchStartY = e.clientY;
+            touchStartTime = Date.now();
+            touchpad.style.cursor = 'grabbing';
+        }
+
+        function handlePointerUp(e) {
+            touchpad.style.cursor = 'grab';
+            const touchDuration = Date.now() - touchStartTime;
+            const moveDistance = Math.sqrt(
+                Math.pow(e.clientX - touchStartX, 2) + 
+                Math.pow(e.clientY - touchStartY, 2)
+            );
+            
+            // Only trigger click if it's a quick tap (less than 200ms) 
+            // and hasn't moved more than 5 pixels
+            if (touchDuration < 200 && moveDistance < 5) {
+                socket.emit('mouse_click', { button: 'left' });
+            }
+        }
+
+        function handlePointerMove(e) {
+            if (e.buttons === 1) {
+                const deltaX = (e.clientX - lastX) * sensitivity;
+                const deltaY = (e.clientY - lastY) * sensitivity;
+                
+                socket.emit('mouse_move', {
+                    x: deltaX,
+                    y: deltaY
+                });
+
+                lastX = e.clientX;
+                lastY = e.clientY;
+            }
+        }
+
+        // Handle left click button
+        document.getElementById('leftClick').addEventListener('touchstart', (e) => {
+            e.preventDefault();  // Prevent double-tap zoom
+            socket.emit('mouse_click', { button: 'left' });
+        });
+
+        document.getElementById('rightClick').addEventListener('touchstart', (e) => {
+            e.preventDefault();  // Prevent double-tap zoom
+            socket.emit('mouse_click', { button: 'right' });
+        });
+
+        document.getElementById('keyboard').addEventListener('keydown', (e) => {
+            socket.emit('key_press', { key: e.key });
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>
+        });
+    </script>
+</body>
+</html>

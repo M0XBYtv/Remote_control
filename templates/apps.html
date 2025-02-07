@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quick Launch - Remote Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: white;
+            min-height: 100vh;
+        }
+
+        .back-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .back-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .container {
+            padding-top: 60px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .search-bar {
+            width: 100%;
+            max-width: 500px;
+            margin: 20px auto;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 16px;
+            backdrop-filter: blur(5px);
+            text-align: center;
+        }
+
+        .search-bar::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .section-title {
+            text-align: center;
+            margin: 40px 0 20px;
+            font-size: 1.5em;
+            color: white;
+            opacity: 0.9;
+        }
+
+        .apps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 15px;
+            padding: 20px;
+        }
+
+        .app-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+            backdrop-filter: blur(5px);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .app-card:hover {
+            transform: translateY(-3px);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .app-icon {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .app-name {
+            font-size: 0.9em;
+            word-break: break-word;
+            margin-bottom: 5px;
+        }
+
+        .favorite-button {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            opacity: 0.5;
+            transition: opacity 0.3s;
+        }
+
+        .favorite-button:hover {
+            opacity: 1;
+        }
+
+        .favorite-button.active {
+            opacity: 1;
+            color: gold;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .app-card {
+            animation: fadeIn 0.3s ease forwards;
+        }
+
+        .no-apps-message {
+            text-align: center;
+            padding: 40px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 1.1em;
+        }
+    </style>
+</head>
+<body>
+    <button class="back-button" onclick="window.location.href='/'">← Back</button>
+
+    <div class="container">
+        <input type="text" class="search-bar" placeholder="Search apps..." id="appSearch">
+        
+        <h2 class="section-title">Favorite Apps</h2>
+        <div class="apps-grid" id="favAppsGrid"></div>
+
+        <h2 class="section-title">All Apps</h2>
+        <div class="apps-grid" id="allAppsGrid"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const appSearch = document.getElementById('appSearch');
+        const favAppsGrid = document.getElementById('favAppsGrid');
+        const allAppsGrid = document.getElementById('allAppsGrid');
+        let apps = [];
+        let favoriteApps = new Set(JSON.parse(localStorage.getItem('favoriteApps') || '[]'));
+
+        function toggleFavorite(app, button) {
+            if (favoriteApps.has(app.path)) {
+                favoriteApps.delete(app.path);
+                button.classList.remove('active');
+                button.textContent = '☆';
+            } else {
+                favoriteApps.add(app.path);
+                button.classList.add('active');
+                button.textContent = '⭐';
+            }
+            localStorage.setItem('favoriteApps', JSON.stringify([...favoriteApps]));
+            displayApps(apps);
+        }
+
+        function createAppCard(app, isFavorite) {
+            const card = document.createElement('div');
+            card.className = 'app-card';
+            
+            const favoriteButton = document.createElement('button');
+            favoriteButton.className = `favorite-button ${isFavorite ? 'active' : ''}`;
+            favoriteButton.textContent = isFavorite ? '⭐' : '☆';
+            favoriteButton.onclick = (e) => {
+                e.stopPropagation();
+                toggleFavorite(app, favoriteButton);
+            };
+
+            const content = document.createElement('div');
+            content.innerHTML = `
+                <div class="app-icon">📱</div>
+                <div class="app-name">${app.name}</div>
+            `;
+            content.onclick = () => socket.emit('launch_app', { path: app.path });
+
+            card.appendChild(favoriteButton);
+            card.appendChild(content);
+            return card;
+        }
+
+        async function loadApps() {
+            try {
+                const response = await fetch('/get_apps');
+                apps = await response.json();
+                displayApps(apps);
+            } catch (error) {
+                console.error('Error loading apps:', error);
+            }
+        }
+
+        function displayApps(appsToShow) {
+            // Display favorite apps
+            favAppsGrid.innerHTML = '';
+            const favoriteAppsList = appsToShow.filter(app => favoriteApps.has(app.path));
+            if (favoriteAppsList.length === 0) {
+                favAppsGrid.innerHTML = '<div class="no-apps-message">No favorite apps yet. Click the ☆ to add apps to favorites!</div>';
+            } else {
+                favoriteAppsList.forEach(app => {
+                    favAppsGrid.appendChild(createAppCard(app, true));
+                });
+            }
+
+            // Display all apps
+            allAppsGrid.innerHTML = '';
+            const regularApps = appsToShow.filter(app => !favoriteApps.has(app.path));
+            if (regularApps.length === 0) {
+                allAppsGrid.innerHTML = '<div class="no-apps-message">No apps found</div>';
+            } else {
+                regularApps.forEach(app => {
+                    allAppsGrid.appendChild(createAppCard(app, false));
+                });
+            }
+        }
+
+        appSearch.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const filteredApps = apps.filter(app => 
+                app.name.toLowerCase().includes(searchTerm)
+            );
+            displayApps(filteredApps);
+        });
+
+        // Load apps when page loads
+        loadApps();
+    </script>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Welcome - Remote Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: white;
+            font-family: Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .welcome-text {
+            font-size: 3em;
+            opacity: 0;
+            filter: blur(10px);
+            transform: scale(0.5);
+            animation: zoomInBlur 2s ease forwards;
+        }
+
+        .name {
+            color: #ff0000;
+            display: inline;
+            opacity: 0;
+            filter: blur(10px);
+            transform: scale(0.5);
+            animation: zoomInBlur 2s ease forwards 1s;
+        }
+
+        .enter-button {
+            margin-top: 50px;
+            padding: 15px 40px;
+            font-size: 1.5em;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid white;
+            color: white;
+            cursor: pointer;
+            border-radius: 30px;
+            opacity: 0;
+            filter: blur(10px);
+            transform: scale(0.5);
+            animation: zoomInBlur 2s ease forwards 2s;
+            transition: all 0.3s ease;
+        }
+
+        .enter-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.1);
+        }
+
+        @keyframes zoomInBlur {
+            0% {
+                opacity: 0;
+                filter: blur(10px);
+                transform: scale(0.5);
+            }
+            100% {
+                opacity: 1;
+                filter: blur(0);
+                transform: scale(1);
+            }
+        }
+
+        .frost {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.1);
+            z-index: -1;
+        }
+    </style>
+</head>
+<body>
+    <div class="frost"></div>
+    <div class="welcome-text">
+        Hello, <span class="name">Maxime</span>
+    </div>
+    <button class="enter-button" onclick="window.location.href='/panel'">ENTER</button>
+</body>
+</html>

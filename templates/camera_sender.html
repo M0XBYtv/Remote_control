@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Camera Sender - Remote Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #localVideo {
+            width: 100%;
+            max-width: 100%;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            transform: scaleX(-1);
+        }
+
+        .controls {
+            display: grid;
+            gap: 15px;
+            width: 100%;
+            max-width: 300px;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.active {
+            background: #4CAF50;
+        }
+
+        .status {
+            margin-top: 20px;
+            text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        #qrCode {
+            margin: 20px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <video id="localVideo" autoplay playsinline muted></video>
+        
+        <div class="controls">
+            <button id="startButton">📸 Start Camera</button>
+            <button id="shareButton" disabled>📡 Share Camera</button>
+            <button id="flipButton" disabled>🔄 Flip Camera</button>
+            <button id="flashButton" disabled>⚡ Flash</button>
+        </div>
+
+        <div class="status" id="status">Camera not started</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const localVideo = document.getElementById('localVideo');
+        const startButton = document.getElementById('startButton');
+        const shareButton = document.getElementById('shareButton');
+        const flipButton = document.getElementById('flipButton');
+        const flashButton = document.getElementById('flashButton');
+        const status = document.getElementById('status');
+
+        let stream;
+        let peerConnection;
+        let currentCamera = 'user';
+        let track;
+
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' }
+            ]
+        };
+
+        startButton.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: currentCamera },
+                    audio: false 
+                });
+                localVideo.srcObject = stream;
+                track = stream.getVideoTracks()[0];
+                
+                startButton.disabled = true;
+                shareButton.disabled = false;
+                flipButton.disabled = false;
+                
+                // Check if flash is available
+                if (track.getCapabilities && track.getCapabilities().torch) {
+                    flashButton.disabled = false;
+                }
+                
+                status.textContent = 'Camera started';
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                status.textContent = 'Error accessing camera';
+            }
+        });
+
+        shareButton.addEventListener('click', async () => {
+            if (!stream) return;
+
+            try {
+                peerConnection = new RTCPeerConnection(configuration);
+                
+                stream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, stream);
+                });
+
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        socket.emit('ice_candidate', event.candidate);
+                    }
+                };
+
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                socket.emit('offer', offer);
+                
+                shareButton.classList.add('active');
+                status.textContent = 'Sharing camera';
+            } catch (error) {
+                console.error('Error sharing camera:', error);
+                status.textContent = 'Error sharing camera';
+            }
+        });
+
+        flipButton.addEventListener('click', async () => {
+            currentCamera = currentCamera === 'user' ? 'environment' : 'user';
+            try {
+                const newStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: currentCamera },
+                    audio: false 
+                });
+                
+                localVideo.srcObject = newStream;
+                
+                if (peerConnection) {
+                    const sender = peerConnection.getSenders().find(s => s.track.kind === 'video');
+                    if (sender) {
+                        await sender.replaceTrack(newStream.getVideoTracks()[0]);
+                    }
+                }
+                
+                // Stop old tracks
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
+                
+                stream = newStream;
+                track = stream.getVideoTracks()[0];
+                
+                // Check flash capability for new camera
+                if (track.getCapabilities && track.getCapabilities().torch) {
+                    flashButton.disabled = false;
+                } else {
+                    flashButton.disabled = true;
+                    flashButton.classList.remove('active');
+                }
+                
+                socket.emit('camera_control', { action: 'flip' });
+            } catch (error) {
+                console.error('Error flipping camera:', error);
+                status.textContent = 'Error flipping camera';
+            }
+        });
+
+        flashButton.addEventListener('click', async () => {
+            if (!track || !track.getCapabilities || !track.getCapabilities().torch) return;
+            
+            try {
+                const isOn = flashButton.classList.contains('active');
+                await track.applyConstraints({
+                    advanced: [{ torch: !isOn }]
+                });
+                flashButton.classList.toggle('active');
+                
+                socket.emit('camera_control', { 
+                    action: 'flash',
+                    state: flashButton.classList.contains('active')
+                });
+            } catch (error) {
+                console.error('Error toggling flash:', error);
+            }
+        });
+
+        socket.on('connect', () => {
+            status.textContent = 'Connected to server';
+        });
+
+        socket.on('disconnect', () => {
+            status.textContent = 'Disconnected from server';
+            shareButton.classList.remove('active');
+        });
+
+        socket.on('answer', async (answer) => {
+            try {
+                if (peerConnection) {
+                    await peerConnection.setRemoteDescription(answer);
+                    status.textContent = 'Camera shared successfully';
+                }
+            } catch (error) {
+                console.error('Error setting remote description:', error);
+                status.textContent = 'Error connecting to receiver';
+            }
+        });
+
+        socket.on('ice_candidate', async (candidate) => {
+            try {
+                if (peerConnection) {
+                    await peerConnection.addIceCandidate(candidate);
+                }
+            } catch (error) {
+                console.error('Error adding ICE candidate:', error);
+            }
+        });
+
+        // Handle page unload
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            if (peerConnection) {
+                peerConnection.close();
+            }
+        });
+    </script>
+</body>
+</html>
