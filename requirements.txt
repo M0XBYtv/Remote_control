@@ -1,11 +1,8 @@
 flask
 flask-socketio
 pyautogui
-opencv-python
-numpy
 eventlet
 netifaces  # Network interface detection
-mss  # Cross-platform screen capture
 pillow
 python-socketio
 python-engineio
