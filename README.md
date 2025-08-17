@@ -5,7 +5,6 @@ A powerful web-based remote control application that allows you to control your 
 ## Features
 - 🖱️ Full mouse control (movement, clicks, scrolling)
 - 🎹 Keyboard input support
-- 🖥️ Screen sharing
 - 📱 Mobile and desktop friendly interface
 
 ## Prerequisites
